@@ -56,6 +56,7 @@ Name | Description |
 | `API_KEY_SIGN_IN_ADMIN_ONLY` | **Optional.** When set to `true`, API key sign-in links only work for users whose instance role includes `admin`. Defaults to `false`. |
 | `MCP_ALLOW_API_KEY` | **Optional.** When set to anything other than `false` (the default is `true`), the MCP transport at `/api/mcp` accepts `Authorization: Bearer <api_key>` in addition to OAuth session tokens, so an MCP client can skip the OAuth2 / device-flow. Set to `false` to force MCP clients through OAuth. Use a key with the rate limit disabled (see [`mcp:create-key`](#mcp-api-key-shortcut)) so the per-call quota check does not block traffic. |
 | `MCP_API_KEY_SESSION_TTL_SECONDS` | **Optional, reserved for a future plan B.** Intended TTL of a short-lived session minted from a valid API key at the MCP transport, so per-tool quota cost collapses to one per MCP request. Not read by the current implementation. |
+| `RUN_AS_ENABLED` | **Optional.** When set to anything other than `false` (the default is `true`), an API-key authenticated request may carry an `x-run-as` header naming a user id or email, and the request acts as that user instead of the key owner. Only instance administrators may use it, and the key's own permission scope still caps what the target can do. Set to `false` to disable. |
 
 The Docker Compose quick-start pins image `2.28.3`, which predates `_FILE`
 support. Raise `KANEO_IMAGE_TAG` to a release containing this feature before

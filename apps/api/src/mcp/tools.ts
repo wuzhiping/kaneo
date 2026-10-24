@@ -31,11 +31,16 @@ class ApiClient {
   constructor(
     private baseUrl: string,
     private token: string,
+    private runAsTargetId?: string,
   ) {}
 
   async json<T = unknown>(path: string, init?: RequestInit): Promise<T> {
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${this.token}`);
+    // Run-as: the downstream REST call must act as the same target user.
+    if (this.runAsTargetId) {
+      headers.set("x-run-as", this.runAsTargetId);
+    }
     if (init?.body != null && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
@@ -75,6 +80,7 @@ export function registerMcpTools(
   server: McpToolRegistrar,
   baseUrl: string,
   token: string,
+  runAsTargetId?: string,
 ): void {
-  registerTools(server, { client: new ApiClient(baseUrl, token) });
+  registerTools(server, { client: new ApiClient(baseUrl, token, runAsTargetId) });
 }

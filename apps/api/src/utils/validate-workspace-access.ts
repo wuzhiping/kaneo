@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db, { schema } from "../database";
 import { hasInstanceAdminRole } from "./instance-admin-role";
@@ -14,22 +14,22 @@ export async function validateWorkspaceAccess(
   options: ValidateWorkspaceAccessOptions = {},
 ): Promise<void> {
   if (apiKeyId) {
-    const apiKey = await db
-      .select()
+    // The key was already verified during authentication (enabled, not expired,
+    // owner not banned). Its owner is deliberately not compared to the
+    // effective user: with run-as the effective user is the target while the
+    // key belongs to the acting administrator.
+    const [apiKey] = await db
+      .select({ id: schema.apikeyTable.id })
       .from(schema.apikeyTable)
       .where(
         and(
           eq(schema.apikeyTable.id, apiKeyId),
-          or(
-            eq(schema.apikeyTable.referenceId, userId),
-            eq(schema.apikeyTable.userId, userId),
-          ),
           eq(schema.apikeyTable.enabled, true),
         ),
       )
       .limit(1);
 
-    if (apiKey.length === 0) {
+    if (!apiKey) {
       throw new HTTPException(403, {
         message: "Invalid API key for this workspace",
       });

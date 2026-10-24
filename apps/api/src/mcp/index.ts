@@ -4,10 +4,11 @@ import {
   isJsonContentType,
   isLegacyRequest,
 } from "@modelcontextprotocol/server";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { auth } from "../auth";
 import { apiRouter, createRoute, jsonResponse } from "../openapi";
+import { applyRunAs } from "../utils/run-as";
 import { type BanState, isBanActive } from "../utils/user-ban";
 import { verifyApiKey } from "../utils/verify-api-key";
 import {
@@ -40,19 +41,27 @@ const internalApiUrl = (
   .replace(/\/api\/?$/, "")
   .replace(/\/+$/, "");
 
-function createMcpServerForUser(token: string): LegacyMcpServer {
+function createMcpServerForUser(
+  token: string,
+  runAsTargetId?: string,
+): LegacyMcpServer {
   const server = new LegacyMcpServer({
     name: "kaneo-mcp",
     version: "1.0.0",
   });
-  registerMcpTools(toMcpToolRegistrar(server), internalApiUrl, token);
+  registerMcpTools(
+    toMcpToolRegistrar(server),
+    internalApiUrl,
+    token,
+    runAsTargetId,
+  );
   return server;
 }
 
 async function validateBearerToken(
-  req: Request,
-): Promise<{ userId: string; token: string } | null> {
-  const authHeader = req.headers.get("authorization");
+  c: Context,
+): Promise<{ userId: string; token: string; runAsTargetId?: string } | null> {
+  const authHeader = c.req.header("authorization");
   if (!authHeader) return null;
   const match = authHeader.match(/^Bearer\s+(\S+)$/i);
   if (!match?.[1]) return null;
@@ -79,7 +88,17 @@ async function validateBearerToken(
   if (process.env.MCP_ALLOW_API_KEY !== "false") {
     const result = await verifyApiKey(token);
     if (result?.status === "valid") {
-      return { userId: result.key.userId, token };
+      // Run-as: act as another user (instance administrators only). The
+      // target id is forwarded to the downstream REST calls.
+      const runAsTargetId = await applyRunAs(c, {
+        actorUserId: result.key.userId,
+        actorApiKeyId: result.key.id,
+      });
+      return {
+        userId: c.get("userId"),
+        token,
+        runAsTargetId: runAsTargetId ?? undefined,
+      };
     }
   }
 
@@ -324,7 +343,7 @@ mcp.get("/.well-known/oauth-authorization-server/api", (c) =>
 );
 
 mcp.all("/mcp", async (c) => {
-  const authResult = await validateBearerToken(c.req.raw);
+  const authResult = await validateBearerToken(c);
   if (!authResult) {
     const prmUrl = `${publicApiUrl}/api/.well-known/oauth-protected-resource/api/mcp`;
     c.header("WWW-Authenticate", `Bearer resource_metadata="${prmUrl}"`);
@@ -346,7 +365,11 @@ mcp.all("/mcp", async (c) => {
   }
 
   if (!(await isLegacyRequest(c.req.raw.clone()))) {
-    const modern = createModernMcpHandler(authResult.token, internalApiUrl);
+    const modern = createModernMcpHandler(
+      authResult.token,
+      internalApiUrl,
+      authResult.runAsTargetId,
+    );
     return modern.fetch(c.req.raw);
   }
 
@@ -355,7 +378,7 @@ mcp.all("/mcp", async (c) => {
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
-  const server = createMcpServerForUser(authResult.token);
+  const server = createMcpServerForUser(authResult.token, authResult.runAsTargetId);
   await server.connect(transport);
   return transport.handleRequest(c.req.raw);
 });

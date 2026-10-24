@@ -5,6 +5,7 @@ import { HTTPException } from "hono/http-exception";
 import { apiKeyRejection } from "./api-key-rejection";
 import { getUserSession } from "./get-user-session";
 import { type ApiKeyRateLimit, rateLimitHeaders } from "./rate-limit-headers";
+import { applyRunAs } from "./run-as";
 import { verifyApiKey } from "./verify-api-key";
 
 // User is tagged on Sentry's isolation scope; the per-request isolation
@@ -72,7 +73,10 @@ type VerifiedApiKey = Extract<
   { status: "valid" }
 >;
 
-function setApiKeyContext(c: Context, { key, rateLimit }: VerifiedApiKey) {
+async function setApiKeyContext(
+  c: Context,
+  { key, rateLimit }: VerifiedApiKey,
+) {
   c.set("userId", key.userId);
   c.set("userEmail", "");
   c.set("user", null);
@@ -85,6 +89,8 @@ function setApiKeyContext(c: Context, { key, rateLimit }: VerifiedApiKey) {
   });
   setRateLimitHeaders(c, rateLimit);
   attachUserToScope(key.userId);
+  // Run-as: act as another user (instance administrators only).
+  await applyRunAs(c, { actorUserId: key.userId, actorApiKeyId: key.id });
 }
 
 export async function authenticateApiRequest(c: Context): Promise<void> {
@@ -99,14 +105,14 @@ export async function authenticateApiRequest(c: Context): Promise<void> {
     if (apiKeyResult?.status !== "valid") {
       throw apiKeyRejection(apiKeyResult);
     }
-    setApiKeyContext(c, apiKeyResult);
+    await setApiKeyContext(c, apiKeyResult);
     return;
   }
 
   if (token) {
     const apiKeyResult = await verifyApiKey(token);
     if (apiKeyResult?.status === "valid") {
-      setApiKeyContext(c, apiKeyResult);
+      await setApiKeyContext(c, apiKeyResult);
       return;
     }
     if (apiKeyResult) {
@@ -153,8 +159,14 @@ export async function resolveAssetBearerOrCookie(c: Context): Promise<{
       throw apiKeyRejection(apiKeyResult);
     }
     setRateLimitHeaders(c, apiKeyResult.rateLimit);
+    // This resolver re-derives the identity, so it has to apply run-as too;
+    // otherwise asset requests would ignore the run-as header.
+    await applyRunAs(c, {
+      actorUserId: apiKeyResult.key.userId,
+      actorApiKeyId: apiKeyResult.key.id,
+    });
     return {
-      userId: apiKeyResult.key.userId,
+      userId: c.get("userId"),
       apiKeyId: apiKeyResult.key.id,
     };
   }
@@ -163,8 +175,12 @@ export async function resolveAssetBearerOrCookie(c: Context): Promise<{
     const apiKeyResult = await verifyApiKey(token);
     if (apiKeyResult?.status === "valid") {
       setRateLimitHeaders(c, apiKeyResult.rateLimit);
+      await applyRunAs(c, {
+        actorUserId: apiKeyResult.key.userId,
+        actorApiKeyId: apiKeyResult.key.id,
+      });
       return {
-        userId: apiKeyResult.key.userId,
+        userId: c.get("userId"),
         apiKeyId: apiKeyResult.key.id,
       };
     }

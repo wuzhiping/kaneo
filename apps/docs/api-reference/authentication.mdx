@@ -168,6 +168,25 @@ The script prints the raw key once. Store it securely and revoke it from **Setti
 
 Set `MCP_ALLOW_API_KEY=false` on the API to force MCP clients through OAuth.
 
+## Run as another user
+
+An API-key request may act as a different user by naming them in the `x-run-as` header. The value is a user id or an email address.
+
+```bash
+curl -X GET https://kaneo.example.com/api/user/me \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "x-run-as: teammate@example.com"
+```
+
+- Only **instance administrators** may do this, and the key owner is re-checked on every request.
+- The request acts **exactly** as the target: the target's workspace memberships decide what is visible, and the target's own permissions decide what can be changed. The administrator's extra instance-wide powers are not carried over.
+- The key's own permission scope still applies, so a read-only key stays read-only.
+- The response carries `x-kaneo-run-as` with the effective user id so a caller can confirm who it acted as.
+- Session and cookie requests ignore the header.
+- Every use is logged to the API log as `[run-as] actor=… target=… method=… path=…`.
+
+Set `RUN_AS_ENABLED=false` on the API to turn this off for the whole instance.
+
 ## Keep credentials private
 
 Use a different key for each integration so you can revoke one without interrupting the others. If a key leaks, revoke it immediately and replace it in the affected service. Device access tokens are secrets too.
