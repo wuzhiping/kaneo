@@ -37,6 +37,7 @@ import type { AccessControl } from "better-auth/plugins/access";
 import type { UserWithAnonymous } from "better-auth/plugins/anonymous";
 import { config } from "dotenv-mono";
 import { eq } from "drizzle-orm";
+import { apiKeySignIn } from "./api-key-sign-in";
 import {
   findBillableWorkspaces,
   formatBillableWorkspacesMessage,
@@ -700,6 +701,7 @@ export const auth = betterAuth({
       defaultRole: "user",
       adminRoles: ["admin"],
     }),
+    apiKeySignIn(),
     openAPI(),
   ],
   session: {

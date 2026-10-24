@@ -23,7 +23,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "openapi:export": "tsx scripts/export-openapi.ts"
+    "openapi:export": "tsx scripts/export-openapi.ts",
+    "mcp:create-key": "tsx scripts/create-mcp-api-key.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1144.0",

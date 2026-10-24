@@ -9,6 +9,7 @@ import { HTTPException } from "hono/http-exception";
 import { auth } from "../auth";
 import { apiRouter, createRoute, jsonResponse } from "../openapi";
 import { type BanState, isBanActive } from "../utils/user-ban";
+import { verifyApiKey } from "../utils/verify-api-key";
 import {
   beginMcpAuthorization,
   decideMcpAuthorizationRequest,
@@ -57,13 +58,32 @@ async function validateBearerToken(
   if (!match?.[1]) return null;
   const token = match[1];
 
+  // 1) OAuth2 / device-flow session token (existing path).
   const headers = new Headers();
   headers.set("authorization", `Bearer ${token}`);
   const session = await auth.api.getSession({ headers });
+  if (session?.user?.id) {
+    if (isBanActive(session.user as BanState)) return null;
+    return { userId: session.user.id, token };
+  }
 
-  if (!session?.user?.id) return null;
-  if (isBanActive(session.user as BanState)) return null;
-  return { userId: session.user.id, token };
+  // 2) Direct API key (default-on, opt-out via MCP_ALLOW_API_KEY=false).
+  //    Lets an MCP client skip the OAuth flow by presenting an API key as a
+  //    Bearer. Downstream REST (authenticateApiRequest) already handles a
+  //    Bearer API key, so the same key is reused for every tool call.
+  //    Quota: each verifyApiKey call consumes 1 from the key's budget, and
+  //    the downstream also re-validates on every call, so the cost is
+  //    1 + N per MCP request (N = number of tools invoked). Use a key
+  //    with rateLimitEnabled=false / a large rateLimitMax to avoid limits
+  //    (see apps/api/scripts/create-mcp-api-key.ts).
+  if (process.env.MCP_ALLOW_API_KEY !== "false") {
+    const result = await verifyApiKey(token);
+    if (result?.status === "valid") {
+      return { userId: result.key.userId, token };
+    }
+  }
+
+  return null;
 }
 
 const mcp = apiRouter();

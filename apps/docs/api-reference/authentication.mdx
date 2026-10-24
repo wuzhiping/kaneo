@@ -58,6 +58,19 @@ A key with a usage quota also gets `429` with `RATE_LIMITED` once the quota runs
 
 Auth endpoints under `/api/auth` can also have their own per-IP limits, for example on sign-up and invitations. Those `429` responses include `Retry-After` but no `X-RateLimit` headers, because the request did not count against the key.
 
+## Sign in from a link
+
+A self-hosted instance can turn an API key into a browser sign-in link. It is off by default, because the link exchanges a long-lived key for a full user session — more than an API key can do on its own.
+
+1. Set `API_KEY_SIGN_IN=true` on the API and restart it.
+2. Open `https://kaneo.example.com/api/auth/api-key/sign-in?key=YOUR_API_KEY&redirect=/dashboard`.
+
+Kaneo verifies the key with the same checks as any API request (enabled, not expired, owner not banned, rate limit and quota), rejects keys that carry permission scopes, creates a session, and redirects to `KANEO_CLIENT_URL` plus `redirect`. The redirect defaults to `/dashboard`, and only same-site paths are honored.
+
+- The session cookie is a browser-session cookie, so closing the browser ends it.
+- Set `API_KEY_SIGN_IN_ADMIN_ONLY=true` to limit the link to users whose instance role includes `admin`.
+- Everything that sees the URL — browser history, proxy and access logs, chat messages — sees the API key. Use a dedicated key and revoke it when the link is no longer needed.
+
 ## Device authorization
 
 By default, self-hosted Kaneo allows the built-in device clients `kaneo-cli` and `kaneo-mcp`.
@@ -133,6 +146,27 @@ curl -X GET https://kaneo.example.com/api/task/tasks/PROJECT_ID \
 The examples use the built-in `kaneo-cli` client ID so they work with the default allowlist. A separately named client needs its own allowed ID in `DEVICE_AUTH_CLIENT_IDS`.
 
 Respect the polling interval returned by the server. On `slow_down`, increase the interval; stop when the code expires or access is denied. Do not log device codes or access tokens.
+
+## MCP API key shortcut
+
+An MCP client can skip the OAuth2 / device-flow by presenting an API key directly as a Bearer on the MCP transport at `POST /api/mcp`. The key must be valid, enabled, not expired, and its owner must not be banned. Scoped keys are accepted at the edge; downstream REST enforces the scope on each tool call.
+
+```bash
+curl -X POST https://kaneo.example.com/api/mcp \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"my-mcp","version":"0"}}}'
+```
+
+Create a key with the rate limit disabled (one verification per MCP request plus one per downstream call, so the default 10 / 24h window fills up fast):
+
+```bash
+pnpm --filter @kaneo/api mcp:create-key -- --user you@example.com
+```
+
+The script prints the raw key once. Store it securely and revoke it from **Settings → Account → Developer** when you no longer need it.
+
+Set `MCP_ALLOW_API_KEY=false` on the API to force MCP clients through OAuth.
 
 ## Keep credentials private
 

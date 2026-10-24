@@ -4,6 +4,13 @@ type CookieAttributeUrls = {
   cookieDomain?: string;
 };
 
+// `KANEO_COOKIE_SAMESITE=none` forces the session/cookie attributes to the
+// cross-site-safe shape (SameSite=None; Secure; Partitioned), so that a
+// browser can store and send the cookie from a third-party iframe (CHIPS).
+// Without `Secure`, browsers reject `SameSite=None` outright, so warn when
+// the operator enables this on a plain-HTTP deployment.
+const forceCrossSite = process.env.KANEO_COOKIE_SAMESITE === "none";
+
 export function getDefaultCookieAttributes({
   apiUrl,
   clientUrl,
@@ -32,11 +39,22 @@ export function getDefaultCookieAttributes({
     }
   })();
 
+  if (forceCrossSite && !isHttps) {
+    console.warn(
+      "[cookies] KANEO_COOKIE_SAMESITE=none is set but the API is not served over HTTPS. SameSite=None requires Secure; browsers will reject the cookie. Use HTTPS or unset the env var.",
+    );
+  }
+
   return {
-    sameSite:
-      isCrossSubdomain && isHttps ? ("none" as const) : ("lax" as const),
-    secure: isHttps,
-    partitioned: isCrossSubdomain && isHttps,
+    sameSite: forceCrossSite
+      ? ("none" as const)
+      : isCrossSubdomain && isHttps
+        ? ("none" as const)
+        : ("lax" as const),
+    secure: forceCrossSite ? true : isHttps,
+    partitioned: forceCrossSite
+      ? true
+      : isCrossSubdomain && isHttps,
     domain: cookieDomain || undefined,
   };
 }
