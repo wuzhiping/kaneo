@@ -78,7 +78,7 @@ export const apiKeySignIn = () => ({
 
         if (
           isEnabled("API_KEY_SIGN_IN_ADMIN_ONLY") &&
-          !hasInstanceAdminRole(user.role)
+          !hasInstanceAdminRole((user as { role?: string | null }).role)
         ) {
           throw new APIError("FORBIDDEN", {
             code: "INSTANCE_ADMIN_REQUIRED",

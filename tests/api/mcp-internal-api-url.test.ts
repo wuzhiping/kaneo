@@ -89,7 +89,10 @@ describe("MCP API URLs", () => {
     expect(String(apiFetch.mock.calls[0]?.[0])).toBe(
       "http://127.0.0.1:1337/api/auth/get-session",
     );
-  });
+    // The first case in this file re-imports the whole MCP module graph
+    // (vi.resetModules) inside the test body, which alone takes several
+    // seconds on slower machines.
+  }, 15000);
 
   it.each(["http://api.internal:1337/api/", "http://api.internal:1337/"])(
     "uses the configured internal URL %s without duplicate slashes",

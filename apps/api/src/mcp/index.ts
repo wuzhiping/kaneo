@@ -8,7 +8,6 @@ import { type Context, Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { auth } from "../auth";
 import { apiRouter, createRoute, jsonResponse } from "../openapi";
-import { applyRunAs } from "../utils/run-as";
 import { type BanState, isBanActive } from "../utils/user-ban";
 import { verifyApiKey } from "../utils/verify-api-key";
 import {
@@ -89,7 +88,10 @@ async function validateBearerToken(
     const result = await verifyApiKey(token);
     if (result?.status === "valid") {
       // Run-as: act as another user (instance administrators only). The
-      // target id is forwarded to the downstream REST calls.
+      // target id is forwarded to the downstream REST calls. The module is
+      // loaded lazily so the MCP import graph stays free of the database
+      // layer for the OAuth session path.
+      const { applyRunAs } = await import("../utils/run-as");
       const runAsTargetId = await applyRunAs(c, {
         actorUserId: result.key.userId,
         actorApiKeyId: result.key.id,
