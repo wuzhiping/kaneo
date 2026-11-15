@@ -24,12 +24,12 @@
 		"test:watch": "vp test --config vitest.config.ts"
 	},
 	"dependencies": {
-		"turndown": "^7.2.4",
+		"turndown": "^7.2.5",
 		"turndown-plugin-gfm": "^1.0.2"
 	},
 	"devDependencies": {
 		"@kaneo/typescript-config": "workspace:*",
-		"@types/node": "^26.6.2",
+		"@types/node": "^26.6.6",
 		"typescript": "^7.0.2",
 		"vite-plus": "catalog:",
 		"@types/turndown": "^5.0.5"
